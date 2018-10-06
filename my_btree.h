@@ -1,37 +1,41 @@
 #include <iostream>
-#define KEY_MAX LLONG_MAX
-#define PAGE_SIZE 4096
+#include "my_interface.h"
+#include "my_page.h"
+#include "my_pagetable.h"
+#include "my_manager.h"
+#include "my_segment.h"
+#define HEIGHT_MAX 2
+class Segment;
+class Manager;
+class Btree;
 
-class KV{
-  public:
-    KV(){};
-    ~KV(){};
-    virtual int Insert()=0;
-
-    virtual int Delete()=0;
-
-    virtual int Update()=0;
-
-    virtual int SearchKey()=0;
-
-    virtual int RangeSearch()=0;
-
-    void Scan(void); 
-
-    int LoadFile(char *);
-    
-  private:
-    int my_Write();
-    int my_Read();
-    int my_Sync();
-
-
+//Logically N-ary tree
+struct Vertex{
+  class Segment Seg;
+  //child is vertex which is lower hierarchy
+  struct Vertex * child;
+  //sibling is vertex which is same hierarchy(Linked list)
+  struct Vertex * sibling;
 };
 
-void KV::Scan(void)
+//Segmented B-tree class
+class Btree: class KV {
+  public:
+    Btree();
+    ~Btree();
 
-int LoadFile(char * filename)
+    virtual int Insert();
 
-int KV::my_Write()
-int KV::my_Read()
-int KV::my_Sync()
+    virtual int Delete();
+
+    virtual int Update();
+
+    virtual int SearchKey();
+
+    virtual int RangeSearch();
+
+  private:
+    class Manager boss;
+};
+
+

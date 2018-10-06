@@ -1,4 +1,10 @@
 #include "my_btree.h"
+#define PAGE_SIZE 4096
+#define KEY_MAX ULONG_MAX
+#define OA_offset 16
+#define METADATA_SIZE 16
+#define KEY_SIZE 4
+#define PGNO_SIZE 4
 
 //For convenience
 typedef uint8_t u8;
@@ -13,35 +19,35 @@ Pgno pgno_counter = 1;
 
 class MemPage{
 
-  /* Page format (10/5)
+  /* Page format (10/6)
    *  It is slotted paged structure.
    *
-   *  1, Matadata portion, 8 bytes
-   *  0 - 1, 2 bytes : number of records
-   *  2 - 3, 2 bytes : Start of record content area
-   *  4 - 7, 4 bytes : parent page number for recover manager structure
+   *  1, Matadata portion, 16 bytes
+   *   0 -  1 , 2 bytes : Number of records
+   *   2 -  3 , 2 bytes : Start of record content area
+   *   4 -  7 , 4 bytes : Parent page number for recover manager structure
+   *   8 - 11 , 4 bytes : Logical page number for recover page table
+   *  12 - 15 , 4 bytes : Right most chlid's logical pgno
+   *
+   *                               ( temporary.. child pgno would be logical. There should be page table.)
+   *  child pgno is invalid until the page is full.
    *
    *  2, Offset Array portion, 2 bytes per record
-   *  Odd number th element is child pgno      4 bytes
-   *  Even number th element is record offset  4 bytes 
-   *  (latter element : front 2 bytes are used for offset.
-   *                    last byte is used for distinguishing deleteness.)
+   *     Last bit means deletion or not.
    *                    0 means remains. 1 means deleted.
-   *  The pattern is page, data, page, data, ... , data, page.
-   *                               ( temporary.. child pgno would be logical. There should be page table.)
-   *  First and Last is child pgno.
-   *  child pgno is invalid until the page is full.
    *
    *  3, Free space between offset array and record content area.
    *  4, Record content area
    *     Record format
-   *    [ 4 bytes size, [ 4 bytes Key : Record ] ]
+   *    [ 4 bytes (Key), 4 bytes (Left child's Logical pgno), 
+   *      2 bytes{Size), n bytes (Value) ]
    *
    */
 
   public:
-    MemPage(u32 MyPgno, u32 ParentPgno){
+    MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno){
     ~MemPage(void);
+
     //Insert record(Key, value).
     //return value means successness.
     //0 means success.
@@ -52,9 +58,25 @@ class MemPage{
     //I have no nice idea to deal with that case. So, just leave it now.
     //When some key is deleted, then left child's range absorbs that key.
     //
-    int Insert(const u8 * record, const u32 size, Pgno& L_pgno);
-    int Delete();
-    int Update();
+    int Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno);
+
+    //Delete
+    //return value means foundness.
+    //0 means be found.
+    //1 means not found.
+    //-1 means not found and the page is not mature. (Invalid delete).
+    int Delete(const u32& Key, Pgno& L_pgno){
+      
+      //Update
+      //Delete and Insert
+      //return value means state.
+      //0 means delete and insert are done.
+      //1 means delete is done, insert on child is left.
+      //2 means none of them are done.
+      //-1 means not found and the page is not mature. (Invalid update).
+      //When new record size is lower than nFree + the old one regardless matureness,
+      //delete and insert can be done on one page.
+    int Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno);
 
     //Search Key
     //return value means be found or not.
@@ -69,11 +91,15 @@ class MemPage{
     //1 means need the child.
     //When the key is not found but the page is not mature,
     //child_pgno is not used
-    int SearchKey(const u32 Key, u16& Idx, Pgno& child_pgno, const u8& need);
+    int SearchKey(const u32& Key, u16& Idx, Pgno& child_pgno, const u8& need);
     int RangeSearch();
 
-    int WritePage(void);
-    int ReadPage();
+    int WritePage(int fd){
+      return pwrite(fd,Data,PAGE_SIZE,(pgno - 1) * PAGE_SIZE);
+    }
+    int ReadPage(int fd){
+      return pread(fd,Data,PAGE_SIZE,(pgno - 1) * PAGE_SIZE);
+    }
 
     //For debugging
     void printPage(void);
@@ -90,6 +116,7 @@ class MemPage{
   //Page size
   u8* Data;
   Pgno pgno;
+  Pgno LogicalPgno;
   u16 nCell;
   u16 nFree;
   u16 top;
@@ -98,6 +125,7 @@ class MemPage{
   //A page can be mature when it no longer take more record.
   //One assumption is needed : All record is always smaller than the page size.
   //0 means not mature, 1 means mature.
+  //Addable?, Appendable?, immutable?... Nice wording is needed.
   u8 IsMature;
 };
 
