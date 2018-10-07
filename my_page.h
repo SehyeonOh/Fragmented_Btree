@@ -5,10 +5,9 @@
 #include <string.h>
 #define PAGE_SIZE 4096
 #define KEY_MAX ULONG_MAX
-#define OA_offset 16
-#define METADATA_SIZE 16
+#define OA_offset 8
+#define METADATA_SIZE 8
 #define KEY_SIZE 4
-#define PGNO_SIZE 4
 
 //For convenience
 typedef uint8_t u8;
@@ -21,14 +20,13 @@ typedef uint32_t Pgno;
 
 class MemPage{
 
-  /* Page format (10/6)
+  /* Page format (10/7)
    *  It is slotted paged structure.
    *
    *  1, Matadata portion, 16 bytes
    *   0 -  1 , 2 bytes : Number of records
    *   2 -  3 , 2 bytes : Start of record content area
    *   4 -  7 , 4 bytes : Parent page number for recover manager structure
-   *   8 - 11 , 4 bytes : Right most chlid's logical pgno
    *
    *                               ( temporary.. child pgno would be logical. There should be page table.)
    *  child pgno is invalid until the page is full.
@@ -40,13 +38,13 @@ class MemPage{
    *  3, Free space between offset array and record content area.
    *  4, Record content area
    *     Record format
-   *    [ 4 bytes (Key), 4 bytes (Left child's Logical pgno), 
+   *    [ 4 bytes (Key), 
    *      2 bytes{Size), n bytes (Value) ]
    *
    */
 
   public:
-    MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno);
+    MemPage(u32 MyPgno, u32 ParentPgno);
     ~MemPage(void);
 
     //Insert record(Key, value).
@@ -59,14 +57,14 @@ class MemPage{
     //I have no nice idea to deal with that case. So, just leave it now.
     //When some key is deleted, then left child's range absorbs that key.
     //
-    int Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno);
+    int Insert(const u32& Key, const u8 * Value, const u16 size, u16& child);
 
     //Delete
     //return value means foundness.
     //0 means be found.
     //1 means not found.
     //-1 means not found and the page is not mature. (Invalid delete).
-    int Delete(const u32& Key, Pgno& L_pgno);
+    int Delete(const u32& Key, u16& child);
       
       //Update
       //Delete and Insert
@@ -77,7 +75,7 @@ class MemPage{
       //-1 means not found and the page is not mature. (Invalid update).
       //When new record size is lower than nFree + the old one regardless matureness,
       //delete and insert can be done on one page.
-    int Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno);
+    int Update(const u32& Key, const u8 * Value, const u16 size, u16& child);
 
     //Search Key
     //return value means be found or not.
@@ -92,7 +90,7 @@ class MemPage{
     //1 means need the child.
     //When the key is not found but the page is not mature,
     //child_pgno is not used
-    int SearchKey(const u32& Key, u16& Idx, Pgno& child_pgno, const u8& need);
+    int SearchKey(const u32& Key, u16& Idx);
     int RangeSearch();
 
     int WritePage(int fd){
@@ -108,11 +106,13 @@ class MemPage{
     u8 IsMatured(void){ return IsMature; }
 
   private:
-   /*
-   *  1, Matadata portion, 8 bytes
-   *  0 - 1, 2 bytes : number of records
-   *  2 - 3, 2 bytes : Start of record content area
-   *  4 - 7, 4 bytes : parent page number for recover manager structure
+  /* Page format (10/7)
+   *  It is slotted paged structure.
+   *
+   *  1, Matadata portion, 16 bytes
+   *   0 -  1 , 2 bytes : Number of records
+   *   2 -  3 , 2 bytes : Start of record content area
+   *   4 -  7 , 4 bytes : Parent page number for recover manager structure
    */
   //Page size
   u8* Data;

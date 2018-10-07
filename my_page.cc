@@ -13,7 +13,7 @@ void put4byte(u8 *p, u32 v){
   p[3] = (u8)v;
 }
 
-MemPage::MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno){
+MemPage::MemPage(u32 MyPgno, u32 ParentPgno){
 
   Data = (u8 *)malloc(PAGE_SIZE);
   //nCell
@@ -23,12 +23,6 @@ MemPage::MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno){
   put2byte(&Data[2],top);
   //Parent pgno
   put4byte(&Data[4],ParentPgno);
-  //My logical pgno
-  LogicalPgno = L_pgno;
-  put4byte(&Data[8],LogicalPgno);
-  //Right most child's logical pgno
-  put4byte(&Data[12],pgno_counter);
-  pgno_counter++;
 
   //Metadata portion, (page elem) 
   nFree = PAGE_SIZE - METADATA_SIZE; 
@@ -42,7 +36,7 @@ MemPage::~MemPage(void){
   //THINK : Should I need to write?
   free(Data);
 }
-int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno){
+int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, u16& child){
   //return value means successness.
   //0 means success.
   //1 means there is no space to put the record.
@@ -53,23 +47,24 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
   //When some key is deleted, then left child's range absorbs that key.
   int rc;
   u16 Idx;
-  u16 record_size = size + 2 + KEY_SIZE + PGNO_SIZE;
-  rc = SearchKey(Key,Idx,L_pgno,1);
+  u16 record_size = size + 2 + KEY_SIZE;
+  rc = SearchKey(Key,Idx);
+  child = Idx;
 
   if(rc){
     //The key is not found.
     if(IsMature){
       //Is mature case.
-      //should set L_pgno
+      //should set child number
       return 1;
     } else if(nFree < 2 + record_size){
       //Is overflow case.
-      //should set L_pgno
+      //should set child number
       IsMature = 1;
       return 1;
     } else {
       //Insert the record in this page.
-      //No need to set L_pgno
+      //No need to set child number
       u16 record_addr = top - record_size;
       //Last bit for deletion mark
       u16 stored = record_addr << 1;
@@ -80,10 +75,8 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       put2byte(&Data[OA_addr],stored);
       //Insert record
       put4byte(&Data[record_addr],Key);
-      put4byte(&Data[record_addr+KEY_SIZE],pgno_counter);
-      pgno_counter++;
-      put2byte(&Data[record_addr+KEY_SIZE+PGNO_SIZE],size);
-      memcpy(&Data[record_addr+KEY_SIZE+PGNO_SIZE+2],Value,size);
+      put2byte(&Data[record_addr+KEY_SIZE],size);
+      memcpy(&Data[record_addr+KEY_SIZE+2],Value,size);
       //modify metadata portion
       nCell++;
       put2byte(Data,nCell);
@@ -100,7 +93,7 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       u16 deletion = Data[OA_addr+1]&1;
       if(deletion){
         //the key is inherited to child.
-        //Should set L_pgno
+        //Should set child number
         return 1;
       } else {
         //Invalid case
@@ -113,14 +106,15 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
     }
   }
 }
-int MemPage::Delete(const u32& Key, Pgno& L_pgno){
+int MemPage::Delete(const u32& Key, u16& child){
   //return value means foundness.
   //0 means be found.
   //1 means not found.
   //-1 means not found and the page is not mature. (Invalid delete).
   int rc;
   u16 Idx;
-  rc = SearchKey(Key,Idx,L_pgno,1);
+  rc = SearchKey(Key,Idx);
+  child = Idx;
   if(rc){
     //Not found
     if(IsMature){
@@ -137,7 +131,7 @@ int MemPage::Delete(const u32& Key, Pgno& L_pgno){
     u16 OA_addr = OA_offset + Idx * 2;
     //record
     u16 record_addr = get2byte(&Data[OA_addr]) >> 1;
-    u16 record_size = get2byte(&Data[record_addr+KEY_SIZE+PGNO_SIZE]);
+    u16 record_size = get2byte(&Data[record_addr+KEY_SIZE]);
     if(IsMature){
       //Do not remove the key in the offset array. just mark it as 'delete'.
       //Adjust offset which is changed by compaction.
@@ -153,7 +147,7 @@ int MemPage::Delete(const u32& Key, Pgno& L_pgno){
       //Offset array
       u16 OA_end = OA_offset + nCell * 2;
       //record
-      record_size += (KEY_SIZE + PGNO_SIZE + 2);
+      record_size += (KEY_SIZE + 2);
       //Sort Offset array
       //TOREMENBER: One logical page number is removed.
       //            It can affact on size of page table.
@@ -175,7 +169,7 @@ int MemPage::Delete(const u32& Key, Pgno& L_pgno){
     }
     //Compaction on record content area
     memmove(&Data[top+record_size],&Data[top],record_addr 
-                                             + IsMature * (KEY_SIZE+PGNO_SIZE) - top);
+                                             + IsMature * (KEY_SIZE) - top);
     nFree += (record_size);
     top += record_size;
     put2byte(&Data[2],top);
@@ -183,7 +177,7 @@ int MemPage::Delete(const u32& Key, Pgno& L_pgno){
   }
 }
 
-int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pgno){
+int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, u16& child){
 //Delete and Insert
 //return value means state.
 //0 means delete and insert are done.
@@ -194,7 +188,8 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
 //delete and insert can be done on one page.
   int rc;
   u16 Idx;
-  rc = SearchKey(Key,Idx,L_pgno,1);
+  rc = SearchKey(Key,Idx);
+  child = Idx;
   if(rc){
     //Not found
     if(IsMature){
@@ -214,7 +209,7 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
     u16 OA_end = OA_offset + nCell * 2;
     //record
     u16 old_record_addr = get2byte(&Data[OA_addr]) >> 1;
-    u16 old_value_size = get2byte(&Data[old_record_addr+KEY_SIZE+PGNO_SIZE]);
+    u16 old_value_size = get2byte(&Data[old_record_addr+KEY_SIZE]);
     u16 old_record_size = old_value_size;
     if(IsMature){
       //Deletion mark.
@@ -225,12 +220,12 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       }
       //Sorting Offset array is delayed
 //      old_record_size += 2;
-      old_record_size += (KEY_SIZE + PGNO_SIZE + 2);
+      old_record_size += (KEY_SIZE + 2);
       //record remains only
       //[ 4 bytes Key, 4 bytes Left child's logical pgno ]
     } else {
       //record
-      old_record_size += (KEY_SIZE + PGNO_SIZE + 2);
+      old_record_size += (KEY_SIZE + 2);
       //Sorting Offset array is delayed
       //for avoiding calling memmove twice.
       //Modify metadata portion
@@ -254,15 +249,14 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       //the insertion will be occurred on child page.
       //Adjust Offset array
       if(IsMature){
-        u16 new_addr = top - KEY_SIZE - PGNO_SIZE;
+        u16 new_addr = top - KEY_SIZE;
         u16 r_addr = new_addr;
         new_addr = new_addr << 1;
         put2byte(&Data[OA_addr],new_addr);
         Data[OA_addr+1] |= 1;
         //Re-insert [Key, Child pgno]
         put4byte(&Data[r_addr],Key);
-        put4byte(&Data[r_addr+KEY_SIZE],L_pgno);
-        nFree -= (KEY_SIZE + PGNO_SIZE);
+        nFree -= (KEY_SIZE);
         top = r_addr;
       } else {
         memmove(&Data[OA_addr],&Data[OA_addr+2],OA_end - (OA_addr + 2));
@@ -276,7 +270,7 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       return 1;
     } else {
       //Can insert into this page
-      u16 record_size = size + 2 + KEY_SIZE + PGNO_SIZE;
+      u16 record_size = size + 2 + KEY_SIZE;
       u16 record_addr = top - record_size;
       //Last bit for deletion mark
       u16 stored = record_addr << 1;
@@ -287,9 +281,8 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
       put2byte(&Data[OA_addr],stored);
       //Insert record
       put4byte(&Data[record_addr],Key);
-      put4byte(&Data[record_addr+KEY_SIZE],L_pgno);
-      put2byte(&Data[record_addr+KEY_SIZE+PGNO_SIZE],size);
-      memcpy(&Data[record_addr+KEY_SIZE+PGNO_SIZE+2],Value,size);
+      put2byte(&Data[record_addr+KEY_SIZE],size);
+      memcpy(&Data[record_addr+KEY_SIZE+2],Value,size);
       //modify metadata portion
       nFree -= (record_size);
       top = record_addr;
@@ -300,7 +293,7 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, Pgno& L_pg
   }
 
 }
-int MemPage::SearchKey(const u32& Key, u16& Idx, Pgno& child_pgno, const u8& need){
+int MemPage::SearchKey(const u32& Key, u16& Idx){
   //return value means be found or not.
   //0 means be found.
   //1 means not found.
@@ -324,10 +317,6 @@ int MemPage::SearchKey(const u32& Key, u16& Idx, Pgno& child_pgno, const u8& nee
     if(c_key == Key){
     //Found case
       Idx = i;
-      if(need == 1){
-        //store left child pgno
-        child_pgno = get4byte(&Data[record_addr+4]);
-      }
       if(deletion){
         //last byte is 1 means deleted.
         //Same as not found.
@@ -339,19 +328,11 @@ int MemPage::SearchKey(const u32& Key, u16& Idx, Pgno& child_pgno, const u8& nee
     } else if(c_key > Key){
       //Not found case
       Idx = i;
-      if(need == 1){
-        //child pgno is needed
-        child_pgno = get4byte(&Data[record_addr+4]);
-      }
       return 1;
     }
   }
   //Not found case
   Idx = nCell;
-  if(need == 1){
-    //Right most child pgno is needed
-    child_pgno = get4byte(&Data[12]);
-  }
   return 1;
 }
 //int MemPage::RangeSearch(u32& Lower, u32& Upper, u8& direction)
@@ -361,11 +342,9 @@ int MemPage::RangeSearch(){
 }
 
 void MemPage::printPage(void){
-  printf("pgno(logical) : %d (%d), parent pgno : %d, nCell : %d, nFree : %d, Top : %di, IsMature : %d------------------\n", 
+  printf("pgno : %d, parent pgno : %d, nCell : %d, nFree : %d, Top : %d, IsMature : %d------------------\n", 
       pgno,get4byte(&Data[4]),
-           get4byte(&Data[8]),nCell,nFree,top,IsMature);
-  printf("\nRightMost Child : %lu\n",
-      get4byte(&Data[12]));
+           nCell,nFree,top,IsMature);
   for(int i = 0; i < nCell; i++){
     u16 cursor = OA_offset + i * 2;
     u16 record_addr = get2byte(&Data[cursor]);
@@ -374,9 +353,9 @@ void MemPage::printPage(void){
     //Remove last bit.
     record_addr = record_addr >> 1;
     u32 c_key = get4byte(&Data[record_addr]);
-    printf("%d th(%d) : (Key %lu), (Child %lu), (loc %u); ",
+    printf("%d th(%d) : (Key %lu), (loc %u); ",
         i, deletion, get4byte(&Data[record_addr]), 
-           get4byte(&Data[record_addr+4]),
            record_addr);
   }
+  printf("\n");
 }
