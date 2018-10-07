@@ -1,4 +1,8 @@
-#include "my_btree.h"
+#include <stdint.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define PAGE_SIZE 4096
 #define KEY_MAX ULONG_MAX
 #define OA_offset 16
@@ -14,8 +18,6 @@ typedef uint64_t u64;
 
 typedef uint32_t Pgno;
 
-//This variable is for allocating page number.
-Pgno pgno_counter = 1;
 
 class MemPage{
 
@@ -26,8 +28,7 @@ class MemPage{
    *   0 -  1 , 2 bytes : Number of records
    *   2 -  3 , 2 bytes : Start of record content area
    *   4 -  7 , 4 bytes : Parent page number for recover manager structure
-   *   8 - 11 , 4 bytes : Logical page number for recover page table
-   *  12 - 15 , 4 bytes : Right most chlid's logical pgno
+   *   8 - 11 , 4 bytes : Right most chlid's logical pgno
    *
    *                               ( temporary.. child pgno would be logical. There should be page table.)
    *  child pgno is invalid until the page is full.
@@ -45,7 +46,7 @@ class MemPage{
    */
 
   public:
-    MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno){
+    MemPage(u32 MyPgno, u32 L_pgno, u32 ParentPgno);
     ~MemPage(void);
 
     //Insert record(Key, value).
@@ -65,7 +66,7 @@ class MemPage{
     //0 means be found.
     //1 means not found.
     //-1 means not found and the page is not mature. (Invalid delete).
-    int Delete(const u32& Key, Pgno& L_pgno){
+    int Delete(const u32& Key, Pgno& L_pgno);
       
       //Update
       //Delete and Insert
@@ -104,7 +105,7 @@ class MemPage{
     //For debugging
     void printPage(void);
 
-    u8 IsMature(void){ return IsMature; }
+    u8 IsMatured(void){ return IsMature; }
 
   private:
    /*
@@ -116,7 +117,6 @@ class MemPage{
   //Page size
   u8* Data;
   Pgno pgno;
-  Pgno LogicalPgno;
   u16 nCell;
   u16 nFree;
   u16 top;

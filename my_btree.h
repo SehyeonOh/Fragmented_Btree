@@ -1,9 +1,9 @@
 #include <iostream>
-#include "my_interface.h"
+//#include "my_interface.h"
 #include "my_page.h"
-#include "my_pagetable.h"
-#include "my_manager.h"
-#include "my_segment.h"
+//#include "my_pagetable.h"
+//#include "my_manager.h"
+//#include "my_segment.h"
 #define HEIGHT_MAX 2
 class Segment;
 class Manager;
