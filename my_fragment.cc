@@ -1,15 +1,19 @@
+#include "my_fragment.h"
+
+u32 pgno_next = 2;
 
 Fragment::Fragment(MemPage* your_root, u32 LB, u32 UB){
   Root = your_root;
   LowerB = LB;
   UpperB = UB;
-  nChild = your_root->nCell + 1;
-  Children = new (MemPage *)[nChild];
-  for(int i = 0; i < nChild; i++){
-    Children[i] = NULL;
-  }
+  nChild = 0;
+  Children = NULL;
+//  Children = new MemPage*[nChild];
+//  for(int i = 0; i < nChild; i++){
+//    Children[i] = NULL;
+//  }
 }
-Segmemt::~Fragment(void){
+Fragment::~Fragment(void){
   //delete all page
   for(int i = 0; i < nChild; i++){
     if(!Children[i]){
@@ -18,7 +22,7 @@ Segmemt::~Fragment(void){
   }
   free(Root);
 }
-int Fragment::Insert(const u32& Key, const u8* Value, const u16 size){
+int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& arg){
   //Find target page and insert it.
   //return value means
   //0 means success.
@@ -31,19 +35,31 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16 size){
   u16 child;
   int rc;
   //First try the Root.
-  rc = Root->Insert(Key,Value,size, child);
+  rc = Root->Insert(Key,Value,size, arg);
+  child = arg.Idx;
   if(rc<=0){
     //success or invaild attempt
     return rc;
   } else {
     //If the child exist, insert it on that page.
-    u16 new_child;
-    if(Children[child]){
-      rc = Children[child]->Insert(Key,Value,size,new_child);
-      return rc;
+    my_arg new_arg;
+    if(Children){
+      if(Children[child]){
+        rc = Children[child]->Insert(Key,Value,size,new_arg);
+        return rc;
+      } else {
+        Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+        rc = Children[child]->Insert(Key,Value,size,new_arg);
+        return rc;
+      }
     } else {
-      Children[child] = new MemPage(pgno_next,Root->pgno);
-      rc = Children[child]->Insert(Key,Value,size,new_child);
+      nChild = Root->GetnCell()+1;
+      Children = new MemPage*[nChild];
+      for(int i = 0; i < nChild; i++){
+        Children[i] = NULL;
+      }
+      Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+      rc = Children[child]->Insert(Key,Value,size,new_arg);
       return rc;
     }
     
@@ -57,16 +73,22 @@ int Fragment::Delete(const u32& Key){
   //-1 means not found( Invalid attempt ) 
   if(Key < LowerB || Key > UpperB)
     return -1;
+  my_arg arg;
   u16 child;
   int rc;
-  rc = Root->Delete(Key,child);
+  rc = Root->Delete(Key,arg);
+  child = arg.Idx;
   if(rc<=0){
     return rc;
   } else {
-    u16 new_child;
-    if(Children[child]){
-      rc = Children[child]->Delete(Key,new_child);
-      return rc;
+    my_arg new_arg;
+    if(Children){
+      if(Children[child]){
+        rc = Children[child]->Delete(Key,new_arg);
+        return rc;
+      } else {
+        return -1;
+      }
     } else {
       return -1;
     }
@@ -80,33 +102,76 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16 size){
   //-1 means Invalid update. (NOTFOUND).
   if(Key < LowerB || Key > UpperB)
     return -1;
+  my_arg arg;
   u16 child;
   int rc;
-  rc = Root->Update(Key,Value,size,child);
+  rc = Root->Update(Key,Value,size,arg);
+  child = arg.Idx;
   if(rc<=0){
     return rc;
   } else if(rc == 1) {
-    u16 new_child;
-    if(Children[child]){
-      rc = Children[child]->Insert(Key,Value,size,child);
-      return rc;
+    my_arg new_arg;
+    if(Children){
+      if(Children[child]){
+        rc = Children[child]->Insert(Key,Value,size,new_arg);
+        return rc;
+      } else {
+        Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+        rc = Children[child]->Insert(Key,Value,size,new_arg);
+        return rc;
+      }
     } else {
-      Children[child] = new MemPage(pgno_next,Root->pgno);
-      rc = Children[child]->Insert(Key,Value,size,child);
+      nChild = Root->GetnCell()+1;
+      Children = new MemPage*[nChild];
+      for(int i = 0; i < nChild; i++){
+        Children[i] = NULL;
+      }
+      Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+      rc = Children[child]->Insert(Key,Value,size,new_arg);
       return rc;
     }
   } else{
     //rc == 2
-    u16 new_child;
-    if(Children[child]){
-      rc = Children[child]->Update(Key,Value,size,new_child);
-      //The key can be inherited.
-      return rc;
+    my_arg new_arg;
+    if(Children){
+      if(Children[child]){
+        rc = Children[child]->Update(Key,Value,size,new_arg);
+        //The key can be inherited.
+        return rc;
+      } else {
+        return -1;
+      }
     } else {
       return -1;
     }
   }
 
 }
-int Fragment::SearchKey();
-int Fragment::RangeSearch();
+int Fragment::SearchKey(){
+
+}
+int Fragment::RangeSearch(){
+
+}
+
+void Fragment::printFragment(void){
+  printf("Fragement information\n");
+  printf("nChild : %lu, Range : (%lu < key < %lu)\n", nChild, LowerB, UpperB);
+  printf("ROOT PAGE---\n");
+  Root->printPage();
+  printf("CHILD PAGES-------------\n");
+  for(int i = 0; i < nChild; i++){
+    if(Children){
+      if(Children[i]){
+        printf("%dth child page------------------------\n", i);
+        Children[i]->printPage();
+
+      } else {
+        printf("%dth child is not exist!---------------,\n", i);
+      }
+    } else {
+      printf("There is no child!!!------------------------------\n");
+    }
+  }
+  printf("-------------------------------------------\n");
+}

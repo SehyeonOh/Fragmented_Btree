@@ -1,6 +1,7 @@
-#include "page.h"
-
-u32 pgno_next = 1;
+#ifndef MY_FRAGMENT_H
+#define MY_FRAGMENT_H
+#include "my_page.h"
+#include <limits.h>
 
 class Fragment{
   public:
@@ -12,7 +13,7 @@ class Fragment{
     //0 means success.
     //1 means need to move to below vertex.
     //-1 means invalid attempt.(Over the range.)
-    int Insert(const u32& Key, const u8* Value, const u16 size);
+    int Insert(const u32& Key, const u8* Value, const u16 size, my_arg& arg);
 
     //Delete
     //return values means
@@ -28,8 +29,13 @@ class Fragment{
     //2 means none of them is done, the key was inherited.
     //-1 means Invalid update. (NOTFOUND).
     int Update(const u32& Key, const u8* Value, const u16 size);
+
     int SearchKey();
     int RangeSearch();
+
+
+    //for debugging
+    void printFragment(void);
   private:
     MemPage* Root;
     //This order is same as offset array in Root page.
@@ -41,4 +47,4 @@ class Fragment{
     u32 UpperB;
 };
 
-
+#endif

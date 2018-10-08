@@ -1,3 +1,5 @@
+#ifndef MY_PAGE_H
+#define MY_PAGE_H
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -16,6 +18,14 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef uint32_t Pgno;
+
+
+//Argument structure
+struct my_arg{
+  u16 Idx;
+  u32 LB;
+  u32 UB;
+};
 
 
 class MemPage{
@@ -57,14 +67,14 @@ class MemPage{
     //I have no nice idea to deal with that case. So, just leave it now.
     //When some key is deleted, then left child's range absorbs that key.
     //
-    int Insert(const u32& Key, const u8 * Value, const u16 size, u16& child);
+    int Insert(const u32& Key, const u8 * Value, const u16 size, my_arg& arg);
 
     //Delete
     //return value means foundness.
     //0 means be found.
     //1 means not found.
     //-1 means not found and the page is not mature. (Invalid delete).
-    int Delete(const u32& Key, u16& child);
+    int Delete(const u32& Key, my_arg& arg);
       
       //Update
       //Delete and Insert
@@ -75,7 +85,7 @@ class MemPage{
       //-1 means not found and the page is not mature. (Invalid update).
       //When new record size is lower than nFree + the old one regardless matureness,
       //delete and insert can be done on one page.
-    int Update(const u32& Key, const u8 * Value, const u16 size, u16& child);
+    int Update(const u32& Key, const u8 * Value, const u16 size, my_arg& arg);
 
     //Search Key
     //return value means be found or not.
@@ -90,7 +100,7 @@ class MemPage{
     //1 means need the child.
     //When the key is not found but the page is not mature,
     //child_pgno is not used
-    int SearchKey(const u32& Key, u16& Idx);
+    int SearchKey(const u32& Key, my_arg& arg);
     int RangeSearch();
 
     int WritePage(int fd){
@@ -104,6 +114,8 @@ class MemPage{
     void printPage(void);
 
     u8 IsMatured(void){ return IsMature; }
+    u16 GetnCell(void){ return nCell;}
+    u32 GetPgno(void){ return pgno;}
 
   private:
   /* Page format (10/7)
@@ -129,3 +141,4 @@ class MemPage{
   u8 IsMature;
 };
 
+#endif

@@ -2,7 +2,6 @@
 #define get2byte(x)   ((x)[0]<<8 | (x)[1])
 #define put2byte(p,v) ((p)[0] = (u8)((v)>>8), (p)[1] = (u8)(v))
 //This variable is for allocating page number.
-Pgno pgno_counter = 1;
 u32 get4byte(const u8 *p){
   return ((unsigned)p[0]<<24) | (p[1]<<16) | (p[2]<<8) | p[3];
 }
@@ -36,7 +35,7 @@ MemPage::~MemPage(void){
   //THINK : Should I need to write?
   free(Data);
 }
-int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, u16& child){
+int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, my_arg& arg){
   //return value means successness.
   //0 means success.
   //1 means there is no space to put the record.
@@ -48,8 +47,8 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, u16& child
   int rc;
   u16 Idx;
   u16 record_size = size + 2 + KEY_SIZE;
-  rc = SearchKey(Key,Idx);
-  child = Idx;
+  rc = SearchKey(Key,arg);
+  Idx = arg.Idx;
 
   if(rc){
     //The key is not found.
@@ -106,15 +105,15 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, u16& child
     }
   }
 }
-int MemPage::Delete(const u32& Key, u16& child){
+int MemPage::Delete(const u32& Key, my_arg& arg){
   //return value means foundness.
   //0 means be found.
   //1 means not found.
   //-1 means not found and the page is not mature. (Invalid delete).
   int rc;
   u16 Idx;
-  rc = SearchKey(Key,Idx);
-  child = Idx;
+  rc = SearchKey(Key,arg);
+  Idx = arg.Idx;
   if(rc){
     //Not found
     if(IsMature){
@@ -161,9 +160,12 @@ int MemPage::Delete(const u32& Key, u16& child){
     //Adjust Offset array
     for(int i = 0; i < nCell; i++){
       u16 addr = OA_offset + i * 2;
-      u16 offset = get2byte(&Data[addr]) >> 1;
+      u16 offset = get2byte(&Data[addr]);
+      u16 deletion = Data[addr+1] & 1;
+      offset = offset >> 1;
       if(offset < record_addr){
         offset = (offset + record_size) << 1;
+        offset |= deletion;
         put2byte(&Data[addr], offset );
       }
     }
@@ -177,7 +179,7 @@ int MemPage::Delete(const u32& Key, u16& child){
   }
 }
 
-int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, u16& child){
+int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, my_arg& arg){
 //Delete and Insert
 //return value means state.
 //0 means delete and insert are done.
@@ -188,8 +190,8 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, u16& child
 //delete and insert can be done on one page.
   int rc;
   u16 Idx;
-  rc = SearchKey(Key,Idx);
-  child = Idx;
+  rc = SearchKey(Key,arg);
+  Idx = arg.Idx;
   if(rc){
     //Not found
     if(IsMature){
@@ -234,9 +236,11 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, u16& child
     //Adjust Offset array
     for(int i = 0; i < nCell; i++){
       u16 addr = OA_offset + i * 2;
-      u16 offset = get2byte(&Data[addr]) >> 1;
+      u16 offset = get2byte(&Data[addr]);
+      u16 deletion = Data[addr+1]& 1;
+      offset = offset >> 1;
       if(offset < old_record_addr)
-        put2byte(&Data[addr], (offset + old_record_size)<<1);
+        put2byte(&Data[addr], ((offset + old_record_size)<<1|deletion));
     }
     //Compaction on record content area
     memmove(&Data[top+old_record_size],&Data[top],old_record_addr - top);
@@ -293,7 +297,7 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, u16& child
   }
 
 }
-int MemPage::SearchKey(const u32& Key, u16& Idx){
+int MemPage::SearchKey(const u32& Key, my_arg& arg){
   //return value means be found or not.
   //0 means be found.
   //1 means not found.
@@ -314,9 +318,10 @@ int MemPage::SearchKey(const u32& Key, u16& Idx){
     //Remove last bit.
     record_addr = record_addr >> 1;
     u32 c_key = get4byte(&Data[record_addr]);
+    arg.UB = c_key;
     if(c_key == Key){
     //Found case
-      Idx = i;
+      arg.Idx = i;
       if(deletion){
         //last byte is 1 means deleted.
         //Same as not found.
@@ -327,12 +332,13 @@ int MemPage::SearchKey(const u32& Key, u16& Idx){
       }
     } else if(c_key > Key){
       //Not found case
-      Idx = i;
+      arg.Idx = i;
       return 1;
     }
+    arg.LB = c_key;
   }
   //Not found case
-  Idx = nCell;
+  arg.Idx = nCell;
   return 1;
 }
 //int MemPage::RangeSearch(u32& Lower, u32& Upper, u8& direction)
