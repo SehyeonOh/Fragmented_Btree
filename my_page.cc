@@ -1,6 +1,7 @@
 #include "my_page.h"
 #define get2byte(x)   ((x)[0]<<8 | (x)[1])
 #define put2byte(p,v) ((p)[0] = (u8)((v)>>8), (p)[1] = (u8)(v))
+u32 pgno_next = 1;
 //This variable is for allocating page number.
 u32 get4byte(const u8 *p){
   return ((unsigned)p[0]<<24) | (p[1]<<16) | (p[2]<<8) | p[3];
@@ -12,7 +13,7 @@ void put4byte(u8 *p, u32 v){
   p[3] = (u8)v;
 }
 
-MemPage::MemPage(u32 MyPgno, u32 ParentPgno){
+MemPage::MemPage(u32 ParentPgno){
 
   Data = (u8 *)malloc(PAGE_SIZE);
   //nCell
@@ -25,7 +26,7 @@ MemPage::MemPage(u32 MyPgno, u32 ParentPgno){
 
   //Metadata portion, (page elem) 
   nFree = PAGE_SIZE - METADATA_SIZE; 
-  pgno = MyPgno;
+  pgno = pgno_next++;
 
   //Matureness
   IsMature = 0;
@@ -38,7 +39,7 @@ MemPage::~MemPage(void){
 int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, my_arg& arg){
   //return value means successness.
   //0 means success.
-  //1 means there is no space to put the record.
+  //1 means need to check child page(intra frag) or below vertex(inter frag)
   //-1 means the key is already in the page.(Invalid attempt)
   //
   //TODO : Think about the case that mature page has usable space by deleting record.
@@ -96,7 +97,7 @@ int MemPage::Insert(const u32& Key, const u8 * Value, const u16 size, my_arg& ar
         return 1;
       } else {
         //Invalid case
-        return -1;
+        return 1;
       }
       
     } else {
@@ -300,16 +301,7 @@ int MemPage::Update(const u32& Key, const u8 * Value, const u16 size, my_arg& ar
 int MemPage::SearchKey(const u32& Key, my_arg& arg){
   //return value means be found or not.
   //0 means be found.
-  //1 means not found.
-  //need value means needness of pgno of child page.
-  //When the key is found,
-  //0 means no need.
-  //1 means left child is needed.
-  //When the key is not found and the page is mature,
-  //0 means no need.
-  //1 means need the child.
-  //When the key is not found but the page is not mature,
-  //child_pgno is not used
+  //1 means NOTFOUND or DELETED.
   for(int i = 0; i < nCell; i++){
     u16 cursor = OA_offset + i * 2;
     u16 record_addr = get2byte(&Data[cursor]);

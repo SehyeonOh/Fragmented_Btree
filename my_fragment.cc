@@ -1,6 +1,5 @@
 #include "my_fragment.h"
 
-u32 pgno_next = 2;
 
 Fragment::Fragment(MemPage* your_root, u32 LB, u32 UB){
   Root = your_root;
@@ -17,10 +16,11 @@ Fragment::~Fragment(void){
   //delete all page
   for(int i = 0; i < nChild; i++){
     if(!Children[i]){
-      free(Children[i]);
+      delete(Children[i]);
     }
   }
-  free(Root);
+  delete(Children);
+  delete(Root);
 }
 int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& arg){
   //Find target page and insert it.
@@ -48,7 +48,7 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& ar
         rc = Children[child]->Insert(Key,Value,size,new_arg);
         return rc;
       } else {
-        Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+        Children[child] = new MemPage(Root->GetPgno());
         rc = Children[child]->Insert(Key,Value,size,new_arg);
         return rc;
       }
@@ -58,7 +58,7 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& ar
       for(int i = 0; i < nChild; i++){
         Children[i] = NULL;
       }
-      Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+      Children[child] = new MemPage(Root->GetPgno());
       rc = Children[child]->Insert(Key,Value,size,new_arg);
       return rc;
     }
@@ -66,14 +66,13 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& ar
   }
 
 }
-int Fragment::Delete(const u32& Key){
+int Fragment::Delete(const u32& Key, my_arg& arg){
   //return values means
   //0 means success
   //1 means the key was inherited to below vertex.
   //-1 means not found( Invalid attempt ) 
   if(Key < LowerB || Key > UpperB)
     return -1;
-  my_arg arg;
   u16 child;
   int rc;
   rc = Root->Delete(Key,arg);
@@ -94,7 +93,7 @@ int Fragment::Delete(const u32& Key){
     }
   }
 }
-int Fragment::Update(const u32& Key, const u8* Value, const u16 size){
+int Fragment::Update(const u32& Key, const u8* Value, const u16 size, my_arg& arg){
   //return value means
   //0 means delete and insert are done.
   //1 means delete is done, insert on below vertex is left.(Key is inherited.)
@@ -102,7 +101,6 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16 size){
   //-1 means Invalid update. (NOTFOUND).
   if(Key < LowerB || Key > UpperB)
     return -1;
-  my_arg arg;
   u16 child;
   int rc;
   rc = Root->Update(Key,Value,size,arg);
@@ -116,7 +114,7 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16 size){
         rc = Children[child]->Insert(Key,Value,size,new_arg);
         return rc;
       } else {
-        Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+        Children[child] = new MemPage(Root->GetPgno());
         rc = Children[child]->Insert(Key,Value,size,new_arg);
         return rc;
       }
@@ -126,7 +124,7 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16 size){
       for(int i = 0; i < nChild; i++){
         Children[i] = NULL;
       }
-      Children[child] = new MemPage(pgno_next++,Root->GetPgno());
+      Children[child] = new MemPage(Root->GetPgno());
       rc = Children[child]->Insert(Key,Value,size,new_arg);
       return rc;
     }

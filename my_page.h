@@ -54,7 +54,7 @@ class MemPage{
    */
 
   public:
-    MemPage(u32 MyPgno, u32 ParentPgno);
+    MemPage(u32 ParentPgno);
     ~MemPage(void);
 
     //Insert record(Key, value).

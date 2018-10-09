@@ -20,7 +20,7 @@ class Fragment{
     //0 means success
     //1 means the key was inherited to below vertex.
     //-1 means not found( Invalid attempt ) 
-    int Delete(const u32& Key);
+    int Delete(const u32& Key, my_arg& arg);
 
     //Update
     //return value means
@@ -28,10 +28,25 @@ class Fragment{
     //1 means delete is done, insert on below vertex is left.(Key is inherited.)
     //2 means none of them is done, the key was inherited.
     //-1 means Invalid update. (NOTFOUND).
-    int Update(const u32& Key, const u8* Value, const u16 size);
+    int Update(const u32& Key, const u8* Value, const u16 size, my_arg& arg);
 
     int SearchKey();
     int RangeSearch();
+
+    int RangeCheck(const u32& Key){
+      return (LowerB < Key && Key < UpperB);
+    }
+
+    void InheritKey(void){
+      UpperB++;
+    }
+
+    u32 ChildPgno(u16 i){
+      return Children[i]->GetPgno();
+    }
+    void IncrementUB(void){
+      UpperB++;
+    }
 
 
     //for debugging
