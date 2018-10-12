@@ -1,0 +1,14 @@
+10/12
+TODO : Modify page operations, frag operations, manager operations because page deletion becomes possible.
+TOTHINK : how to reuse deleted pgno
+          adjust filesize
+          how to efficiently do 'Update'
+          The structure to store and search sibling efficiently
+          Read file and build structure
+          Modify compaction. Compaction will be done only on 'Update'.
+          How to compation
+            allocate New Data[4096]
+            Move cells one by one
+            apply all data on the new data
+            swap Data to new Data
+            deallocate old one

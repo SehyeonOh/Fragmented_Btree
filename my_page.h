@@ -8,6 +8,8 @@
 #include <set>
 #define PAGE_SIZE 4096
 #define KEY_MAX (ULONG_MAX-1)
+#define ROOT_OA_offset 16
+#define ROOT_METADATA_SIZE 16
 #define OA_offset 10
 #define METADATA_SIZE 10
 #define KEY_SIZE 4

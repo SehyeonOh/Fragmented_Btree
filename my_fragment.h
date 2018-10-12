@@ -73,6 +73,8 @@ class Fragment{
     //UpperB can be incremented whenthe UpperB is inherited from parent page.
     u32 LowerB;
     u32 UpperB;
+
+    Vertex* parent;
 };
 
 #endif
