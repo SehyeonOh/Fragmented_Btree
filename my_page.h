@@ -5,10 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <set>
 #define PAGE_SIZE 4096
-#define KEY_MAX ULONG_MAX
-#define OA_offset 8
-#define METADATA_SIZE 8
+#define KEY_MAX (ULONG_MAX-1)
+#define OA_offset 10
+#define METADATA_SIZE 10
 #define KEY_SIZE 4
 
 //For convenience
@@ -17,14 +18,15 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef uint32_t Pgno;
-
+class MemPage;
 
 //Argument structure
 struct my_arg{
   u16 Idx;
   u32 LB;
   u32 UB;
+  u32 Pgno;
+  std::set<MemPage*>* write_set;
 };
 
 
@@ -54,53 +56,41 @@ class MemPage{
    */
 
   public:
-    MemPage(u32 ParentPgno);
+    //Pgno should take appropriate last bit.
+    //Before construct page
+    MemPage(const u32& root_pgno, const u16& nthChild);
+    //Construct from disk image
+    MemPage(const int& fd, const u32& Pgno, u8& type);
     ~MemPage(void);
 
-    //Insert record(Key, value).
     //return value means successness.
     //0 means success.
-    //1 means there is no space to put the record.
-    //-1 means the key is already in the page.(Invalid attempt)
-    //
+    //1 means need to check child page(intra frag) or below vertex(inter frag)
     //TODO : Think about the case that mature page has usable space by deleting record.
     //I have no nice idea to deal with that case. So, just leave it now.
     //When some key is deleted, then left child's range absorbs that key.
     //
-    int Insert(const u32& Key, const u8 * Value, const u16 size, my_arg& arg);
+    int Insert(const u32& Key, const u8 * Value, const u16& size, const my_arg& arg);
 
     //Delete
-    //return value means foundness.
-    //0 means be found.
-    //1 means not found.
-    //-1 means not found and the page is not mature. (Invalid delete).
-    int Delete(const u32& Key, my_arg& arg);
+    //return value means
+    //0 means that the record and offset elem is deleted.
+    //1 means that the record is deleted only.( for distinguishing inheritance. )
+    int Delete(const u32& Key, const my_arg& arg);
       
-      //Update
-      //Delete and Insert
-      //return value means state.
-      //0 means delete and insert are done.
-      //1 means delete is done, insert on child is left.
-      //2 means none of them are done.
-      //-1 means not found and the page is not mature. (Invalid update).
-      //When new record size is lower than nFree + the old one regardless matureness,
-      //delete and insert can be done on one page.
-    int Update(const u32& Key, const u8 * Value, const u16 size, my_arg& arg);
+    //Update
+    //return value means success.
+    //0 means update is completed.
+    //1 means delete is completed, but insert is not possible.
+    int Update(const u32& Key, const u8 * Value, const u16& size, const my_arg& arg);
 
-    //Search Key
+    //SearchKey
     //return value means be found or not.
     //0 means be found.
-    //1 means not found.
-    //need value means needness of pgno of child page.
-    //When the key is found,
-    //0 means no need.
-    //1 means left child is needed.
-    //When the key is not found and the page is mature,
-    //0 means no need.
-    //1 means need the child.
-    //When the key is not found but the page is not mature,
-    //child_pgno is not used
-    int SearchKey(const u32& Key, my_arg& arg);
+    //1 means NOTFOUND or DELETED.
+    int SearchKey(const u32& Key, my_arg& arg) const;
+
+    u8* GetRecord(const u16& Idx)const;
     int RangeSearch();
 
     int WritePage(int fd){
@@ -117,14 +107,31 @@ class MemPage{
     u16 GetnCell(void){ return nCell;}
     u32 GetPgno(void){ return pgno;}
 
+    //For convinient recovery,
+    void SetShortCut(Vertex* shortcut){
+      my_vtx = shortcut;
+    }
+    Vertex* GetVertex(void){
+      return my_vtx;
+    }
+    u32 GetRootPgno(void){
+      return get4byte(&Data[4])>>1;
+    }
+    u16 GetnThChild(void){
+      return get2byte(&Data[8]);
+    }
+
   private:
-  /* Page format (10/7)
+  /* Page format (10/11)
    *  It is slotted paged structure.
    *
-   *  1, Matadata portion, 16 bytes
+   *  1, Matadata portion, 10 bytes
    *   0 -  1 , 2 bytes : Number of records
    *   2 -  3 , 2 bytes : Start of record content area
-   *   4 -  7 , 4 bytes : Parent page number for recover manager structure
+   *   4 -  7 , 4 bytes : (Root page) : store parent fragment's root pgno
+   *                      (Child page): store Own fragment's root pgno
+   *                      Last bit : 0 means root page. 1 means child page.
+   *   8 -  9 , 2 bytes : Position of the page in the fragment (nth child)
    */
   //Page size
   u8* Data;
@@ -139,6 +146,10 @@ class MemPage{
   //0 means not mature, 1 means mature.
   //Addable?, Appendable?, immutable?... Nice wording is needed.
   u8 IsMature;
+
+  //For efficient recovery
+  //This is only used for recovery. and root of fragment only has this.
+  Vertex* my_vtx;
 };
 
 #endif

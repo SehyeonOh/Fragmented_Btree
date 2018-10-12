@@ -1,7 +1,7 @@
 #include "my_fragment.h"
 
 
-Fragment::Fragment(MemPage* your_root, u32 LB, u32 UB){
+Fragment::Fragment(MemPage* your_root,const u32& LB,const u32& UB){
   Root = your_root;
   LowerB = LB;
   UpperB = UB;
@@ -22,137 +22,264 @@ Fragment::~Fragment(void){
   delete(Children);
   delete(Root);
 }
-int Fragment::Insert(const u32& Key, const u8* Value, const u16 size, my_arg& arg){
+int Fragment::Insert(const u32& Key, const u8* Value, const u16& size, my_arg& arg){
   //Find target page and insert it.
   //return value means
   //0 means success.
   //1 means need to move to below vertex.
-  //-1 means invalid attempt.(Over the range.)
-  if(Key < LowerB || Key > UpperB)
-    return -1;
+  //-1 means invalid attempt.(redundent key)
   //TODO: Logical pgno may be useless. There is no need of page table.
   //Fragment class can the role of page table.
+//  printf("(INSERT) LB : %lu UB : %lu\n",LowerB, UpperB);
   u16 child;
   int rc;
-  //First try the Root.
+  //First search the Root.
+  rc = Root->SearchKey(Key,arg);
+  if(!rc){
+    //the key is already in the page.
+    //Invalid(redundent key)
+    return -1;
+  } 
+  //the key is not found.
   rc = Root->Insert(Key,Value,size, arg);
+  if(!rc){
+    //Insertion is successfully done.
+    arg.write_set->insert(Root);
+    return 0;
+  } 
+  //go to child page
+//  printf("(frag) goto child page\n");
   child = arg.Idx;
-  if(rc<=0){
-    //success or invaild attempt
-    return rc;
-  } else {
-    //If the child exist, insert it on that page.
-    my_arg new_arg;
-    if(Children){
-      if(Children[child]){
-        rc = Children[child]->Insert(Key,Value,size,new_arg);
-        return rc;
-      } else {
-        Children[child] = new MemPage(Root->GetPgno());
-        rc = Children[child]->Insert(Key,Value,size,new_arg);
-        return rc;
-      }
-    } else {
-      nChild = Root->GetnCell()+1;
-      Children = new MemPage*[nChild];
-      for(int i = 0; i < nChild; i++){
-        Children[i] = NULL;
-      }
-      Children[child] = new MemPage(Root->GetPgno());
-      rc = Children[child]->Insert(Key,Value,size,new_arg);
-      return rc;
+  if(!Children){
+    //If Children is not initialized,
+    //Initialize Children first.
+    nChild = Root->GetnCell()+1;
+    Children = new MemPage*[nChild];
+    for(int i = 0; i < nChild; i++){
+      Children[i] = NULL;
     }
-    
   }
-
+  //Check existance of the target child
+  if(!Children[child]){
+    //If the target child is not created yet,
+    //Create it and insert.
+    Children[child] = new MemPage(Root->GetPgno());
+    arg.Idx = 0;
+    rc = Children[child]->Insert(Key,Value,size,arg);
+    arg.write_set->insert(Children[child]);
+    //return 0;
+    return 0;
+  } 
+  //If the target child is already created,
+  //Check it
+  rc = Children[child]->SearchKey(Key,arg);
+  if(!rc){
+    //the key is already in the page.
+    //Invalid(redundent key)
+    return -1;
+  } 
+  //the key is not in the page.
+  arg.Pgno = Children[child]->GetPgno();
+  rc = Children[child]->Insert(Key,Value,size,arg);
+  if(rc){
+    //return 1
+    //1 means overflow. So insert into below vertex.
+    return 1;
+  }
+  //return 0 
+  arg.write_set->insert(Children[child]);
+  return 0;
 }
 int Fragment::Delete(const u32& Key, my_arg& arg){
   //return values means
   //0 means success
-  //1 means the key was inherited to below vertex.
-  //-1 means not found( Invalid attempt ) 
-  if(Key < LowerB || Key > UpperB)
-    return -1;
+  //1 means the key will be inherited to below vertex.
+  //-1 means Invalid attempt(Not found) 
+//  printf("(DELETE) LB : %lu UB : %lu\n",LowerB, UpperB);
   u16 child;
   int rc;
-  rc = Root->Delete(Key,arg);
+  rc = Root->SearchKey(Key,arg);
   child = arg.Idx;
-  if(rc<=0){
-    return rc;
-  } else {
-    my_arg new_arg;
-    if(Children){
-      if(Children[child]){
-        rc = Children[child]->Delete(Key,new_arg);
-        return rc;
-      } else {
-        return -1;
-      }
-    } else {
-      return -1;
-    }
+  if(!rc){
+    //found
+    Root->Delete(Key,arg);
+    arg.write_set->insert(Root);
+    //Inheritance is automatically distinguished by SearchKey.
+    //Smoothly flow to child page.
+    return 0;
+  } 
+  //Not found
+  if(!Root->IsMatured()){
+    //Not mature, there are no child below.
+    //Invalid (Not found)
+    return -1;
+  } 
+  //go to child page
+  if(!Children){
+    //If there is no children,
+    //Invalid (Not found)
+    return -1;
   }
+  //Check the target child
+  if(!Children[child]){
+    //If the target child does not exist,
+    //Invalid (Not found)
+    return -1;
+  }
+  //the target child exists.
+  rc = Children[child]->SearchKey(Key,arg);
+  if(rc){
+    //Not found
+    //Invalid (Not found)
+    return -1;
+  }
+  //found
+  rc = Children[child]->Delete(Key,arg);
+  //return 0 or 1
+  if(rc){
+    //return 1
+    //1 means the key will be inherited.
+    return 1;
+  }
+  //return 0 
+  arg.write_set->insert(Children[child]);
+  return 0;
 }
-int Fragment::Update(const u32& Key, const u8* Value, const u16 size, my_arg& arg){
+int Fragment::Update(const u32& Key, const u8* Value, const u16& size, my_arg& arg){
   //return value means
-  //0 means delete and insert are done.
+  //0 means update is done.
   //1 means delete is done, insert on below vertex is left.(Key is inherited.)
-  //2 means none of them is done, the key was inherited.
-  //-1 means Invalid update. (NOTFOUND).
-  if(Key < LowerB || Key > UpperB)
-    return -1;
+  //-1 means Invalid (NOTFOUND).
   u16 child;
   int rc;
-  rc = Root->Update(Key,Value,size,arg);
+  rc = Root->SearchKey(Key,arg);
   child = arg.Idx;
-  if(rc<=0){
-    return rc;
-  } else if(rc == 1) {
-    my_arg new_arg;
-    if(Children){
-      if(Children[child]){
-        rc = Children[child]->Insert(Key,Value,size,new_arg);
-        return rc;
-      } else {
-        Children[child] = new MemPage(Root->GetPgno());
-        rc = Children[child]->Insert(Key,Value,size,new_arg);
-        return rc;
-      }
-    } else {
-      nChild = Root->GetnCell()+1;
-      Children = new MemPage*[nChild];
-      for(int i = 0; i < nChild; i++){
-        Children[i] = NULL;
-      }
-      Children[child] = new MemPage(Root->GetPgno());
-      rc = Children[child]->Insert(Key,Value,size,new_arg);
-      return rc;
-    }
-  } else{
-    //rc == 2
-    my_arg new_arg;
-    if(Children){
-      if(Children[child]){
-        rc = Children[child]->Update(Key,Value,size,new_arg);
-        //The key can be inherited.
-        return rc;
-      } else {
-        return -1;
-      }
-    } else {
+  if(rc){
+    //Not found
+    if(!Root->IsMatured()){
+      //Not mature, there are no child below.
+      //Invalid (Not found)
       return -1;
     }
+    //go to child
+    if(!Children){
+      //If children does not exist,
+      //Invalid (Not found)
+      return -1;
+    }
+    //children exists.
+    if(!Children[child]){
+      //If the target child does not exist,
+      //Invalid (Not found)
+      return -1;
+    }
+    //Check the child page
+    rc = Children[child]->SearchKey(Key,arg);
+    if(rc){
+      //Not found
+      //Invalid (Not found)
+      return -1;
+    }
+    //Found in child page
+    arg.Pgno = Children[child]->GetPgno();
+    rc = Children[child]->Update(Key,Value,size,arg);
+  } else {
+    //Found
+    rc = Root->Update(Key,Value,size,arg);
+    if(!rc){
+      //Update is done
+      arg.write_set->insert(Root);
+      return 0;
+    }
+    //go to child(Insert)
+    if(!Children){
+      //If children does not exist,
+      //Invalid (Not found)
+      return -1;
+    }
+    //children exists.
+    if(!Children[child]){
+      //If the target child is not created yet,
+      //Create it and insert.
+      Children[child] = new MemPage(Root->GetPgno());
+      arg.Idx = 0;
+      rc = Children[child]->Insert(Key,Value,size,arg);
+      //return 0;
+      arg.write_set->insert(Children[child]);
+      return 0;
+    } 
+    //If the target child is already created,
+    //Check it
+    rc = Children[child]->SearchKey(Key,arg);
+    if(!rc){
+      //the key is already in the page.
+      //Invalid(redundent key)
+      return -1;
+    } 
+    //the key is not in the page.
+    arg.Pgno = Children[child]->GetPgno();
+    rc = Children[child]->Insert(Key,Value,size,arg);
   }
-
+  //return 0 or 1
+  if(rc){
+    //return 1
+    //1 means go to below(Insert). The key is inherited.
+    return 1;
+  }
+  //return 0 
+  arg.write_set->insert(Children[child]);
+  return 0;
 }
-int Fragment::SearchKey(){
+u8* Fragment::Search(const u32& Key,my_arg& arg)const{
+  //return values means
+  //NULL means NotFound
+  //Otherwise, record address is returned.
+  u16 child;
+  int rc;
+  rc = Root->SearchKey(Key,arg);
+  child = arg.Idx;
+  if(!rc){
+    //Found
+    u8* Record = Root->GetRecord(arg.Idx);
+    return Record;
+  }
+  //Not found, check child
+  if(!Root->IsMatured()){
+    //Not mature, there are no child below.
+    //(Not found)
+    return NULL;
+  } 
+  //go to child page
+  if(!Children){
+    //If there is no children,
+    //(Not found)
+    return NULL;
+  }
+  //Check the target child
+  if(!Children[child]){
+    //If the target child does not exist,
+    //(Not found)
+    return NULL;
+  }
+  //the target child exists.
+  rc = Children[child]->SearchKey(Key,arg);
+  if(rc){
+    //Not found
+    //(Not found)
+    return NULL;
+  }
+  //found
+  u8* Record = Children[child]->GetRecord(arg.Idx);
+  //return 0 or 1
+  //1 means the key will be inherited.
+  return Record;
 
 }
 int Fragment::RangeSearch(){
 
 }
 
-void Fragment::printFragment(void){
+void Fragment::printFragment(void)const{
   printf("Fragement information\n");
   printf("nChild : %lu, Range : (%lu < key < %lu)\n", nChild, LowerB, UpperB);
   printf("ROOT PAGE---\n");

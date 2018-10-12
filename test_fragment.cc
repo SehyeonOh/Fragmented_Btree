@@ -2,7 +2,7 @@
 using namespace std;
 
 int main(){
-  MemPage * page = new MemPage(1,0);
+  MemPage * page = new MemPage(0);
   printf("Initial\n");
   page->printPage();
 
@@ -37,7 +37,7 @@ int main(){
   for(int j = 0; j < 207; j++){
     int k = (j + 1) * 207;
 //    rc = frag->Delete(k);
-    rc = frag->Update(k,buf,14);
+    rc = frag->Update(k,buf,14,arg);
     printf("(%d) rc : %d\n",k,rc);
   }
 //  for(int j = 0; j < 205; j++){

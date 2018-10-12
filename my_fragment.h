@@ -5,35 +5,38 @@
 
 class Fragment{
   public:
-    Fragment(MemPage* your_root, u32 LB, u32 UB);
+    Fragment(MemPage* your_root,const u32& LB,const u32& UB);
     ~Fragment(void);
 
     //Insert
     //return value means
     //0 means success.
     //1 means need to move to below vertex.
-    //-1 means invalid attempt.(Over the range.)
-    int Insert(const u32& Key, const u8* Value, const u16 size, my_arg& arg);
+    //-1 means invalid attempt.(redundent key)
+    int Insert(const u32& Key, const u8* Value, const u16& size, my_arg& arg);
 
     //Delete
     //return values means
     //0 means success
-    //1 means the key was inherited to below vertex.
-    //-1 means not found( Invalid attempt ) 
+    //1 means the key will be inherited to below vertex.
+    //-1 means Invalid attempt(Not found) 
     int Delete(const u32& Key, my_arg& arg);
 
     //Update
     //return value means
-    //0 means delete and insert are done.
+    //0 means update is done.
     //1 means delete is done, insert on below vertex is left.(Key is inherited.)
-    //2 means none of them is done, the key was inherited.
-    //-1 means Invalid update. (NOTFOUND).
-    int Update(const u32& Key, const u8* Value, const u16 size, my_arg& arg);
+    //-1 means Invalid (NOTFOUND).
+    int Update(const u32& Key, const u8* Value, const u16& size, my_arg& arg);
 
-    int SearchKey();
+    //Search
+    //return values means
+    //NULL means NotFound
+    //Otherwise, record address is returned.
+    u8* Search(const u32& Key, my_arg& arg)const;
     int RangeSearch();
 
-    int RangeCheck(const u32& Key){
+    int RangeCheck(const u32& Key)const{
       return (LowerB < Key && Key < UpperB);
     }
 
@@ -41,16 +44,26 @@ class Fragment{
       UpperB++;
     }
 
-    u32 ChildPgno(u16 i){
+    u32 ChildPgno(const u16& i)const{
       return Children[i]->GetPgno();
     }
     void IncrementUB(void){
       UpperB++;
     }
+    u32 GetLowerB(void)const{
+      return LowerB;
+    }
+    u32 GetUpperB(void)const{
+      return UpperB;
+    }
+    //for debugging
+    u32 GetRootPgno(void) const{
+      return Root->GetPgno();
+    }
 
 
     //for debugging
-    void printFragment(void);
+    void printFragment(void)const;
   private:
     MemPage* Root;
     //This order is same as offset array in Root page.
