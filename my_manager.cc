@@ -29,10 +29,13 @@ Manager::Manager(int FD){
     MemPage** pg_list = new MemPage*[N_page];
     MemPage* ptr;
     //2, Get page one by one
+    load_arg ld_arg;
     for(u32 i = 0; i < N_page; i++){
       ptr = pg_list[i];
-      u8 type;
-      ptr = new MemPage(fd,i,type);
+      bool type;
+      ld_arg.root.Pgno = i;
+      //TODO:modify
+      ptr = new MemPage(fd,ld_arg,type);
       //Last bit is already removed.
       u32 Root_pgno = ptr->GetRootPgno();
       u16 nThChild = ptr->GetnThChild();
@@ -63,7 +66,7 @@ Manager::Manager(int FD){
     }
   }else {
     //Initial constructor
-    MemPage* root = new MemPage(0,0);
+    MemPage* root = new MemPage(0,0,KEY_MAX);
     Top = new Vertex(root, 0, KEY_MAX);
   }
   begin_flag = 0;
@@ -96,24 +99,9 @@ int Manager::Insert(const u32& Key, const u8* Value, const u16& size){
     //Inherit?
     arg.UB++;
   }
-  MemPage* new_page = new MemPage(arg.Pgno);
-  Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
-//  printf("new frag\n");
-//  printf("%lu < .. < %lu\n",arg.LB, arg.UB);
-  rc = new_vtx->Frag->Insert(Key,Value,size,arg);
-  if(rc){
-    //If not correctly done,
-    //ERROR
-    printf("ERROR-----------------------------------------------\n");
-    exit(0);
-  }
-  Vertex* lm = vtx->GetChild();
-  vtx->SetChild(new_vtx);
-  new_vtx->SetSibling(lm);
-  if(!begin_flag){
-    CommitTxn();
-  }
-  return 0;
+  //Key inheritance and insert the key
+  rc = InheritAndInsert(vtx,Key,Value,size,arg);
+  return rc;
 }
 int Manager::Delete(const u32& Key){
   //return value means
@@ -134,20 +122,21 @@ int Manager::Delete(const u32& Key){
     }
     return rc;
   } 
-  //Key inheritance
-  Vertex * bt_vtx = InheritKey(Key,vtx);
-  if(bt_vtx == vtx){
-    //There is no child which has the key as the upper bound.
-    //inheritance is not needed.
-    //the
-  } else {
-    //The upper bound is already incremented in InheritKey method.
-    //Nothing to do remains.
-  }
-  if(!begin_flag){
-    CommitTxn();
-  }
-  return 0;
+  //Unaccessable
+//  //Key inheritance
+//  Vertex * bt_vtx = InheritKey(Key,vtx);
+//  if(bt_vtx == vtx){
+//    //There is no child which has the key as the upper bound.
+//    //inheritance is not needed.
+//    //the
+//  } else {
+//    //The upper bound is already incremented in InheritKey method.
+//    //Nothing to do remains.
+//  }
+//  if(!begin_flag){
+//    CommitTxn();
+//  }
+//  return 0;
 }
 int Manager::Update(const u32& Key, const u8* Value, const u16& size){
   //return value means
@@ -169,7 +158,14 @@ int Manager::Update(const u32& Key, const u8* Value, const u16& size){
     return rc;
   } 
   //Key inheritance and insert the key
+  rc = InheritAndInsert(vtx,Key,Value,size,arg);
+  return rc;
+}
+
+
+int Manager::InheritAndInsert(Vertex* vtx,const u32& Key, const u8* Value, const u16& size, my_arg& arg){
   Vertex * bt_vtx = InheritKey(Key,vtx);
+  int rc;
   if(bt_vtx == vtx){
     //There is no child which has the key as the upper bound.
     //Need to create child vertex which takes the inheritance and the (key,value).
@@ -177,7 +173,7 @@ int Manager::Update(const u32& Key, const u8* Value, const u16& size){
       printf("Something wrong!!!!!!!!!!!!!\n");
     }
     arg.UB++;
-    MemPage* new_page = new MemPage(arg.Pgno);
+    MemPage* new_page = new MemPage(arg.Pgno,arg.LB, arg.UB);
     Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
     rc = new_vtx->Frag->Insert(Key,Value,size,arg);
     if(rc){
@@ -206,7 +202,7 @@ int Manager::Update(const u32& Key, const u8* Value, const u16& size){
       return rc;
     } 
     arg.UB++;
-    MemPage* new_page = new MemPage(arg.Pgno);
+    MemPage* new_page = new MemPage(arg.Pgno,arg.LB,arg.UB);
     Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
     rc = new_vtx->Frag->Insert(Key,Value,size,arg);
     if(rc){
@@ -224,7 +220,6 @@ int Manager::Update(const u32& Key, const u8* Value, const u16& size){
   }
   return 0;
 }
-
 u8* Manager::Search(const u32& Key, u16& size)const{
   //return values means
   //NULL means NotFound

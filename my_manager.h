@@ -42,6 +42,8 @@ class Manager{
     //-1 means invalid attempt.(NotFound)
     int Update(const u32& Key, const u8* Value, const u16& size);
 
+    //InheritAndInsert
+    int InheritAndInsert(Vertex* vtx,const u32& Key, const u8* Value, const u16& size, my_arg& arg);
     //Search
     //return values means
     //NULL means NotFound

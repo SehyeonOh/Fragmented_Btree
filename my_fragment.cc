@@ -7,10 +7,6 @@ Fragment::Fragment(MemPage* your_root,const u32& LB,const u32& UB){
   UpperB = UB;
   nChild = 0;
   Children = NULL;
-//  Children = new MemPage*[nChild];
-//  for(int i = 0; i < nChild; i++){
-//    Children[i] = NULL;
-//  }
 }
 Fragment::~Fragment(void){
   //delete all page
@@ -35,23 +31,22 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16& size, my_arg& a
   int rc;
   //First search the Root.
   rc = Root->SearchKey(Key,arg);
+  child = arg.Idx;
   if(!rc){
     //the key is already in the page.
     //Invalid(redundent key)
     return -1;
   } 
-  //the key is not found.
-  rc = Root->Insert(Key,Value,size, arg);
-  if(!rc){
-    //Insertion is successfully done.
-    arg.write_set->insert(Root);
-    return 0;
-  } 
-  //go to child page
-//  printf("(frag) goto child page\n");
-  child = arg.Idx;
   if(!Children){
+    //Matureness is replaced existence of Children pointer.
     //If Children is not initialized,
+    //the key is not found.
+    rc = Root->Insert(Key,Value,size, arg);
+    if(!rc){
+      //Insertion is successfully done.
+      arg.write_set->insert(Root);
+      return 0;
+    } 
     //Initialize Children first.
     nChild = Root->GetnCell()+1;
     Children = new MemPage*[nChild];
@@ -59,11 +54,13 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16& size, my_arg& a
       Children[i] = NULL;
     }
   }
+  //go to child page
+  //  printf("(frag) goto child page\n");
   //Check existance of the target child
   if(!Children[child]){
     //If the target child is not created yet,
     //Create it and insert.
-    Children[child] = new MemPage(Root->GetPgno());
+    Children[child] = new MemPage(Root->GetPgno(),child);
     arg.Idx = 0;
     rc = Children[child]->Insert(Key,Value,size,arg);
     arg.write_set->insert(Children[child]);
@@ -102,18 +99,16 @@ int Fragment::Delete(const u32& Key, my_arg& arg){
   child = arg.Idx;
   if(!rc){
     //found
-    Root->Delete(Key,arg);
+    if(Children){
+      Root->DeleteMark(Key,arg);
+    } else {
+      Root->Delete(Key,arg);
+    }
     arg.write_set->insert(Root);
-    //Inheritance is automatically distinguished by SearchKey.
-    //Smoothly flow to child page.
+    //TODO : Check drop page or not.
     return 0;
   } 
   //Not found
-  if(!Root->IsMatured()){
-    //Not mature, there are no child below.
-    //Invalid (Not found)
-    return -1;
-  } 
   //go to child page
   if(!Children){
     //If there is no children,
@@ -135,14 +130,9 @@ int Fragment::Delete(const u32& Key, my_arg& arg){
   }
   //found
   rc = Children[child]->Delete(Key,arg);
-  //return 0 or 1
-  if(rc){
-    //return 1
-    //1 means the key will be inherited.
-    return 1;
-  }
-  //return 0 
+  //return 0
   arg.write_set->insert(Children[child]);
+  //TODO: Check drop page or not.
   return 0;
 }
 int Fragment::Update(const u32& Key, const u8* Value, const u16& size, my_arg& arg){
@@ -156,11 +146,6 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16& size, my_arg& a
   child = arg.Idx;
   if(rc){
     //Not found
-    if(!Root->IsMatured()){
-      //Not mature, there are no child below.
-      //Invalid (Not found)
-      return -1;
-    }
     //go to child
     if(!Children){
       //If children does not exist,
@@ -193,15 +178,18 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16& size, my_arg& a
     }
     //go to child(Insert)
     if(!Children){
-      //If children does not exist,
-      //Invalid (Not found)
-      return -1;
+      //Initialize Children first.
+      nChild = Root->GetnCell()+1;
+      Children = new MemPage*[nChild];
+      for(int i = 0; i < nChild; i++){
+        Children[i] = NULL;
+      }
     }
     //children exists.
     if(!Children[child]){
       //If the target child is not created yet,
       //Create it and insert.
-      Children[child] = new MemPage(Root->GetPgno());
+      Children[child] = new MemPage(Root->GetPgno(),child);
       arg.Idx = 0;
       rc = Children[child]->Insert(Key,Value,size,arg);
       //return 0;
@@ -244,11 +232,6 @@ u8* Fragment::Search(const u32& Key,my_arg& arg)const{
     return Record;
   }
   //Not found, check child
-  if(!Root->IsMatured()){
-    //Not mature, there are no child below.
-    //(Not found)
-    return NULL;
-  } 
   //go to child page
   if(!Children){
     //If there is no children,
