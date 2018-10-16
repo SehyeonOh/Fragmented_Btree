@@ -60,7 +60,7 @@ int Fragment::Insert(const u32& Key, const u8* Value, const u16& size, my_arg& a
   if(!Children[child]){
     //If the target child is not created yet,
     //Create it and insert.
-    Children[child] = new MemPage(Root->GetPgno(),child);
+    Children[child] = new MemPage((Root->GetPgno()<<1) | 1,child);
     arg.Idx = 0;
     rc = Children[child]->Insert(Key,Value,size,arg);
     arg.write_set->insert(Children[child]);
@@ -189,7 +189,7 @@ int Fragment::Update(const u32& Key, const u8* Value, const u16& size, my_arg& a
     if(!Children[child]){
       //If the target child is not created yet,
       //Create it and insert.
-      Children[child] = new MemPage(Root->GetPgno(),child);
+      Children[child] = new MemPage((Root->GetPgno()<<1)|1,child);
       arg.Idx = 0;
       rc = Children[child]->Insert(Key,Value,size,arg);
       //return 0;

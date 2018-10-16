@@ -28,22 +28,22 @@ int main(){
   }
   int fd = open("file_output.txt",O_RDWR | O_CREAT, 0666);
   Manager * mng = new Manager(fd);
-  printf("Initial manager\n");
-  fflush(stdout);
-
+  int rc;
+//  printf("Initial manager\n");
+//  fflush(stdout);
+//
   mng->Visualize();
-//  mng->printManager();
+  mng->printManager();
   u8 buf[1024];
   for(int i = 0; i < 1024; i++){
     buf[i] = (u8)(rand()& (1<<7 - 1));
   }
-  printf("start insert\n\n");
-  fflush(stdout);
-  int rc;
-  for(int j = 0; j < test_size/divide; j++){
-    rc = mng->Insert(key_seq[j],buf,len_seq[j]);
-//    printf("(%lu) rc : %d\n",key_seq[j],rc);
-  }
+//  printf("start insert\n\n");
+//  fflush(stdout);
+//  for(int j = 0; j < test_size/divide; j++){
+//    rc = mng->Insert(key_seq[j],buf,len_seq[j]);
+////    printf("(%lu) rc : %d\n",key_seq[j],rc);
+//  }
 //  mng->Visualize();
 //  mng->printManager();
   printf("\n");

@@ -161,12 +161,6 @@ class MemPage{
     Vertex* GetVertex(void){
       return my_vtx;
     }
-    u32 GetRootPgno(void){
-      return get4byte(&Data[4])>>1;
-    }
-    u16 GetnThChild(void){
-      return get2byte(&Data[8]);
-    }
 
   private:
   /* Page format (10/15)

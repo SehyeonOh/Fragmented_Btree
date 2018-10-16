@@ -44,6 +44,18 @@ class Fragment{
       UpperB++;
     }
 
+    int SetnthChild(MemPage * page, u16 nthchild){
+      if(!Children){
+        nChild = Root->GetnCell()+1;
+        Children = new MemPage*[nChild];
+      }
+      if(Children[nthchild]){
+        return 1; // Already exist?
+      }
+      Children[nthchild] = page;
+      return 0;
+    }
+
     u32 ChildPgno(const u16& i)const{
       return Children[i]->GetPgno();
     }

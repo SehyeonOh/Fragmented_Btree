@@ -77,11 +77,11 @@ MemPage::MemPage(const int& fd, load_arg& arg, bool& type){
   nFree = get2byte(&Data[4]);
   if(type){
     // child page
-    arg.child.Pgno = get4byte(&Data[6]);
+    arg.child.Pgno = get4byte(&Data[6])>>1;
     arg.child.nthchild = get2byte(&Data[10]);
   } else {
     // root page
-    arg.root.Pgno = get4byte(&Data[6]);
+    arg.root.Pgno = get4byte(&Data[6])>>1;
     arg.root.LB = get4byte(&Data[10]);
     arg.root.UB = get4byte(&Data[14]);
   }
@@ -295,7 +295,7 @@ void MemPage::Compaction(void){
   //modify top. only top is modified.
   top = record_cur;
   put2byte(&new_Data[2],top);
-  if(top != nFree){
+  if(top - my_OA_offset - 2 * nCell != nFree){
     printf("WRONG!!\n");
     exit(0);
   }

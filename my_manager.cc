@@ -30,38 +30,50 @@ Manager::Manager(int FD){
     MemPage* ptr;
     //2, Get page one by one
     load_arg ld_arg;
-    for(u32 i = 0; i < N_page; i++){
-      ptr = pg_list[i];
+    for(u32 i = 1; i < N_page+1; i++){
       bool type;
       ld_arg.root.Pgno = i;
       //TODO:modify
       ptr = new MemPage(fd,ld_arg,type);
+      pg_list[i-1] = ptr;
       //Last bit is already removed.
-      u32 Root_pgno = ptr->GetRootPgno();
-      u16 nThChild = ptr->GetnThChild();
-      if(type){
+      if(!type){
         //Root page of some fragment
         //Create Vertex and Set the hierarchy of vertex(child or parent)
         u32 LB, UB;
         Vertex* parent = NULL;
-        if(!Root_pgno){
+        if(!ld_arg.root.Pgno){
           //Top vertex
           //has no parent vertex
-          LB = 0;
-          UB = KEY_MAX;
+          LB = ld_arg.root.LB;
+          UB = ld_arg.root.UB;
         } else {
           //the other vertices
           //has parent
           //find parent vertex
-          parent = pg_list[Root_pgno]->GetVertex();
+          parent = pg_list[ld_arg.root.Pgno-1]->GetVertex();
           //find boundary
-
+          LB = ld_arg.root.LB;
+          UB = ld_arg.root.UB;
         }
         Vertex* new_vtx = new Vertex(ptr,LB,UB);
-        //For easy recovery
         ptr->SetShortCut(new_vtx);
+        if(!ld_arg.root.Pgno){
+          Top = new_vtx;
+        } else {
+          //For easy recovery
+          if(Vertex* ch = parent->GetChild()){
+            //Yes Child
+            new_vtx->SetSibling(ch);
+            parent->SetChild(new_vtx);
+          } else {
+            parent->SetChild(new_vtx);
+          }
+        }
       } else {
         //Child page of some fragment
+        Vertex* my_vtx = pg_list[ld_arg.child.Pgno-1]->GetVertex();
+        my_vtx->Frag->SetnthChild(ptr,ld_arg.child.nthchild);
       }
     }
   }else {
@@ -98,10 +110,30 @@ int Manager::Insert(const u32& Key, const u8* Value, const u16& size){
   if(arg.UB == Key) {
     //Inherit?
     arg.UB++;
+    //Key inheritance and insert the key
+    rc = InheritAndInsert(vtx,Key,Value,size,arg);
+    return rc;
+  } else {
+    MemPage* new_page = new MemPage(vtx->Frag->GetRootPgno()<<1,arg.LB,arg.UB);
+    Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
+    //  printf("new frag\n");
+    //  printf("%lu < .. < %lu\n",arg.LB, arg.UB);
+    rc = new_vtx->Frag->Insert(Key,Value,size,arg);
+    if(rc){
+      //If not correctly done,
+      //ERROR
+      printf("ERROR-----------------------------------------------\n");
+      exit(0);
+    }
+    Vertex* lm = vtx->GetChild();
+    vtx->SetChild(new_vtx);
+    new_vtx->SetSibling(lm);
+    if(!begin_flag){
+      CommitTxn();
+    }
+    return 0;
+
   }
-  //Key inheritance and insert the key
-  rc = InheritAndInsert(vtx,Key,Value,size,arg);
-  return rc;
 }
 int Manager::Delete(const u32& Key){
   //return value means
@@ -173,7 +205,7 @@ int Manager::InheritAndInsert(Vertex* vtx,const u32& Key, const u8* Value, const
       printf("Something wrong!!!!!!!!!!!!!\n");
     }
     arg.UB++;
-    MemPage* new_page = new MemPage(arg.Pgno,arg.LB, arg.UB);
+    MemPage* new_page = new MemPage(vtx->Frag->GetRootPgno()<<1,arg.LB, arg.UB);
     Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
     rc = new_vtx->Frag->Insert(Key,Value,size,arg);
     if(rc){
@@ -202,7 +234,7 @@ int Manager::InheritAndInsert(Vertex* vtx,const u32& Key, const u8* Value, const
       return rc;
     } 
     arg.UB++;
-    MemPage* new_page = new MemPage(arg.Pgno,arg.LB,arg.UB);
+    MemPage* new_page = new MemPage(bt_vtx->Frag->GetRootPgno()<<1,arg.LB,arg.UB);
     Vertex * new_vtx = new Vertex(new_page,arg.LB,arg.UB);
     rc = new_vtx->Frag->Insert(Key,Value,size,arg);
     if(rc){
